@@ -1,0 +1,157 @@
+# ============================================================
+# SECRETS AND ENVIRONMENT FILES
+# Never commit real credentials, API keys, tokens, or VPN secrets.
+# ============================================================
+
+# Real environment files
+.env
+.env.*
+*.env
+*.env.local
+*.env.production
+*.env.development
+
+# Allow committed templates
+!.env.example
+!env/*.env.example
+!**/*.env.example
+
+# Common secret / credential files
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+*.keystore
+*.jks
+secrets/
+secrets.*
+credentials/
+credentials.*
+token*
+*.token
+
+# ============================================================
+# STACKARR RUNTIME DATA
+# Configuration databases, service connections, activity history,
+# and local state must remain on the NAS, not in Git.
+# ============================================================
+
+stackarr-data/
+stackarr-state/
+stackarr/config/
+stackarr/config.*
+stackarr/*.db
+stackarr/*.sqlite
+stackarr/*.sqlite3
+stackarr/backups/
+stackarr/logs/
+stackarr/log/
+*.stackarr.bak
+*.stackarr-backup
+
+# ============================================================
+# HERMES RUNTIME DATA
+# Agent state, sessions, transcripts, caches, and local credentials.
+# ============================================================
+
+hermes-data/
+hermes-state/
+hermes/config/
+hermes/config.yaml
+hermes/config.yml
+hermes/sessions/
+hermes/transcripts/
+hermes/cache/
+hermes/logs/
+hermes/log/
+*.hermes.bak
+*.hermes-backup
+
+# ============================================================
+# LOGS AND TEMPORARY FILES
+# ============================================================
+
+*.log
+*.log.*
+logs/
+log/
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ============================================================
+# BACKUPS AND EXPORTS
+# ============================================================
+
+backups/
+backup/
+*.bak
+*.backup
+*.dump
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar
+
+# ============================================================
+# DOCKER / PORTAINER LOCAL ARTIFACTS
+# ============================================================
+
+docker-compose.override.yml
+compose.override.yml
+docker-compose.*.local.yml
+compose.*.local.yml
+.portainer/
+portainer-data/
+
+# ============================================================
+# EDITORS AND IDEs
+# ============================================================
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# ============================================================
+# OPERATING SYSTEM FILES
+# ============================================================
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================
+# OPTIONAL LOCAL TOOLING
+# ============================================================
+
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
