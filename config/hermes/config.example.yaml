@@ -1,0 +1,101 @@
+# ---------------------------------------------------------------------------
+# Hermes Agent configuration template
+#
+# Copy to the Hermes data directory as:
+#   /opt/data/config.yaml
+#
+# Secrets belong in /opt/data/.env, not in this file.
+# ---------------------------------------------------------------------------
+
+# --- Model provider ---
+# Start with OpenRouter. Choose a tool-calling-capable model before WP3.
+model:
+  provider: openrouter
+  # Replace with the exact OpenRouter model ID you choose.
+  # Examples are model IDs only; verify current availability and pricing.
+  default: "TODO_CHOOSE_OPENROUTER_MODEL_ID"
+
+# Optional fallback model for resilience.
+# fallback:
+#   - "TODO_FALLBACK_MODEL_ID"
+
+# --- Terminal and command execution ---
+# Hermes must not create or manage Docker sandbox containers.
+# The local backend runs inside the Hermes container itself.
+terminal:
+  backend: local
+  cwd: "/opt/data"
+  timeout: 180
+  home_mode: auto
+  env_passthrough: []
+
+# --- Database ---
+# Hermes uses SQLite for sessions, messages, and gateway routing.
+database:
+  journal_mode: wal
+
+# --- Updates ---
+# Keep update backups enabled; this makes Hermes upgrades more recoverable.
+updates:
+  pre_update_backup: quick
+  backup_keep: 5
+  non_interactive_local_changes: stash
+  auto_switch_parked_branch: true
+
+# --- MCP servers ---
+# Stackarr is the only approved media-stack tool server.
+# Hermes must not receive upstream media-service API keys.
+mcp_servers:
+  stackarr:
+    url: "${STACKARR_MCP_URL}"
+
+    # The real token is provided through env/hermes.env.
+    headers:
+      Authorization: "Bearer ${STACKARR_MCP_TOKEN}"
+
+    # Start with the smallest useful read-only surface.
+    # Verify these exact tool names after Stackarr is deployed, then update
+    # this allowlist through a reviewed Git change.
+    tools:
+      include:
+        - list_services
+        - get_service_status
+        - search_series
+        - search_movies
+        - get_series
+        - get_movie
+        - get_queue
+        - get_downloads
+        - get_requests
+        - get_health
+        - get_logs
+
+    # Disable MCP resource and prompt wrappers unless explicitly needed.
+    resources: false
+    prompts: false
+
+# --- Tool restrictions ---
+# Disable built-in tools that are unnecessary for the media-stack assistant
+# and could increase its blast radius.
+tools:
+  # Disable direct filesystem access unless a specific, reviewed workflow needs it.
+  filesystem: false
+
+  # Disable browser control; not needed for Stackarr media operations.
+  browser: false
+
+  # Disable computer-use/screen control; not needed for Stackarr media operations.
+  computer_use: false
+
+# --- Memory ---
+# Keep persistent memory enabled, but do not allow it to become a secret store.
+memory:
+  enabled: true
+
+# --- Agent behavior ---
+agent:
+  # Keep interactions conservative and explicit.
+  max_turns: 20
+
+  # Require confirmation for approval-required Stackarr actions.
+  require_confirmation: true
