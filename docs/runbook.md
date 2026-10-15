@@ -22,7 +22,7 @@ This repository does not deploy, upgrade, or modify those media services. Stacka
 - Every image is pinned to an exact version or digest; floating tags are not used.
 - Every deployment has a documented rollback path.
 
-Stackarr’s supported Docker installation uses a Compose file with an adjacent `.env` file for overrides, and recommends using an exact image version rather than a moving tag for reproducible deployments and rollback.
+Stackarr’s supported Docker installation uses a Compose file with an adjacent `.env` file for overrides, and recommends an exact image version rather than a moving tag for reproducible deployments and rollback.
 
 ## 2. Host and deployment model
 
@@ -46,10 +46,10 @@ Stackarr’s supported Docker installation uses a Compose file with an adjacent 
 | Component | May access | Must not access |
 |---|---|---|
 | Hermes | Stackarr MCP endpoint | Docker socket, media-service APIs, NAS filesystem, SSH, SMB, DSM, Portainer |
-| Stackarr | Selected media-service APIs; Docker socket for its selected-container management | Hermes secrets, LLM provider API key |
+| Stackarr | Selected media-service APIs; Docker socket for selected-container management | Hermes secrets, LLM provider API key |
 | Media services | Their own configuration and media paths | Hermes configuration or credentials |
 
-Stackarr requires the Docker socket to inspect and manage containers selected during setup. This is host-level access and must be limited to Stackarr; Hermes must never receive it.
+Stackarr requires `/var/run/docker.sock` to inspect and manage containers selected during setup. This is powerful host-level access and must be limited to Stackarr; Hermes must never receive it.
 
 ## 3. Service inventory
 
@@ -66,12 +66,12 @@ Stackarr requires the Docker socket to inspect and manage containers selected du
 | Media root | `/volume1/data/media` → `/media` |
 | Downloads root | `/volume1/data/torrents` → `/downloads` |
 | Backup root | `/volume1/data/backup/stackarr` → `/backups` |
-| Networks | `management`, `media` |
+| Networks | `agent`, `synobridge` |
 | Authority profile | `observe` |
 | Docker socket | Mounted into Stackarr only; never mounted into Hermes |
 | Dashboard exposure | Localhost only until authentication is configured |
 
-Stackarr’s documented defaults are web port `7777`, bind address `127.0.0.1`, and environment variables for media, downloads, and backup roots.
+Stackarr’s documented defaults are web port `7777`, bind address `127.0.0.1`, and environment variables for media, downloads, and backup roots. It starts other services only after they are selected during setup.
 
 ### Hermes
 
@@ -80,56 +80,75 @@ Stackarr’s documented defaults are web port `7777`, bind address `127.0.0.1`, 
 | Purpose | Conversational agent using Stackarr MCP |
 | Image | `nousresearch/hermes-agent:v2026.8.3` |
 | Image digest | `sha256:16788311e2fa3035456bdc1bafb8ec2b1777db64ebf020af9bb7eb73c3712c9e` |
-| Web/UI port | `8642` |
+| Gateway API port | `8642` |
+| Dashboard port | `9119`, only if `HERMES_DASHBOARD=1` |
 | Data volume | `/volume1/docker/hermes` → `/opt/data` |
-| Network | `management` only |
+| Network | `agent` only |
 | MCP server | Stackarr |
 | LLM provider | OpenRouter |
 | Default model | `TODO_CHOOSE_BEFORE_HERMES_DEPLOYMENT` |
 | Docker socket | Never mounted |
 | Direct media-service access | Never permitted |
+| Terminal backend | `local`; Docker terminal backend disabled |
 
-Hermes stores non-secret settings in `config.yaml` and secrets such as API keys in its `.env`. In Docker, its Hermes data directory is mounted at `/opt/data`.
+Hermes stores all mutable state—configuration, `.env`, sessions, memories, skills, logs, and its SQLite state database—in the single `/opt/data` volume.
 
 ## 4. Networks
 
+The existing Sonarr/Radarr services use `network_mode: synobridge`. Therefore, Stackarr joins `synobridge` to reach them, while Hermes remains isolated on the dedicated `agent` network.
+
 | Network | Purpose | Members | External exposure |
 |---|---|---|---|
-| `management` | Agent control plane | Stackarr, Hermes | LAN/admin access only |
-| `media` | Existing media-service network | Stackarr plus existing media services | No direct WAN exposure |
+| `agent` | Hermes-to-Stackarr control plane | Stackarr, Hermes | No direct WAN exposure |
+| `synobridge` | Existing Synology bridge network used by media services | Existing media services, Stackarr | No direct WAN exposure |
 | Existing Gluetun network | VPN-isolated torrent traffic | Gluetun, qBittorrent | No direct WAN exposure |
 
 ### Network rules
 
-- Hermes joins `management` only.
-- Stackarr joins `management` and `media`.
-- Hermes reaches Stackarr by its Compose service name, for example `http://stackarr:7777`.
-- Hermes must not be added to `media`.
+- Hermes joins `agent` only.
+- Stackarr joins `agent` and `synobridge`.
+- Hermes reaches Stackarr by its Compose service name: `http://stackarr:7777`.
+- Stackarr reaches Sonarr/Radarr containers by container name on `synobridge`, for example `http://prod-sonarr-tv:8989`.
+- If container-name resolution on `synobridge` fails, Stackarr uses the NAS LAN IP and each service’s published port instead.
+- Hermes must not join `synobridge`.
 - Stackarr must not be exposed publicly.
 - Hermes must not be exposed publicly.
 - The Stackarr dashboard remains bound to `127.0.0.1` until authentication and access controls are configured.
 
-## 5. Paths and volumes
+## 5. Existing media-service map
+
+| Media type | Compose service | Container name | Internal port | Published port | Root-folder prefix |
+|---|---|---|---:|---:|---|
+| General TV | `sonarr-tv` | `prod-sonarr-tv` | `8989` | `${SONARR_TV_PORT}` | `/media/...` |
+| Anime TV | `sonarr-anime` | `prod-sonarr-anime` | `8989` | `${SONARR_ANIME_PORT}` | `/media/...` |
+| Asian TV | `sonarr-asian` | `prod-sonarr-asian` | `8989` | `${SONARR_ASIAN_PORT}` | `/media/...` |
+| General movies | `radarr-movies` | `prod-radarr-movies` | `7878` | `${RADARR_MOVIES_PORT}` | `/media/...` |
+| Anime movies | `radarr-anime` | `prod-radarr-anime` | `7878` | `${RADARR_ANIME_PORT}` | `/media/...` |
+| Asian movies | `radarr-asian` | `prod-radarr-asian` | `7878` | `${RADARR_ASIAN_PORT}` | `/media/...` |
+
+All Sonarr/Radarr containers mount `${DATA_ROOT}` at `/media`. The exact root-folder subpaths, quality profiles, categories/tags, and Seerr behavior are documented in `docs/service-map.md` and must be verified from each running application.
+
+## 6. Paths and volumes
 
 | Component | Host path | Container path | Backup priority | Notes |
 |---|---|---|---|---|
 | Stackarr configuration | `/volume1/docker/stackarr/config` | `/config` | Critical | Service selections, settings, activity data |
 | Stackarr logs | `/volume1/docker/stackarr/logs` | `TODO_VERIFY_AFTER_FIRST_RUN` | High | Retain for incident review |
-| Hermes data | `/volume1/docker/hermes` | `/opt/data` | Critical | `config.yaml`, `.env`, sessions, memories, state |
+| Hermes data | `/volume1/docker/hermes` | `/opt/data` | Critical | `config.yaml`, `.env`, sessions, memories, skills, state database |
 | Media root | `/volume1/data/media` | `/media` | No | Existing media library |
 | Downloads root | `/volume1/data/torrents` | `/downloads` | No | Existing download location |
 | Backup root | `/volume1/data/backup/stackarr` | `/backups` | Critical | Stackarr-managed backup destination |
 
 Create host folders before starting Stackarr and ensure the Docker runtime can read and write them.
 
-## 6. Credentials and secrets
+## 7. Credentials and secrets
 
 | Secret | Stored in | Used by | Git-safe? |
 |---|---|---|---|
 | Stackarr dashboard/admin credential | NAS-side secret store or Stackarr configuration | Stackarr | No |
 | Stackarr MCP credential/token | Hermes `.env` on NAS | Hermes | No |
 | Media-service API keys | Stackarr configuration / NAS-side secret store | Stackarr | No |
-| LLM provider API key | Hermes `.env` on NAS | Hermes | No |
+| OpenRouter API key | Hermes `.env` on NAS | Hermes | No |
 | Telegram/Discord credentials | Hermes `.env` on NAS | Hermes | No |
 | GitHub token, if required | NAS-side secret store or Portainer | Portainer | No |
 
@@ -143,7 +162,7 @@ Create host folders before starting Stackarr and ensure the Docker runtime can r
 
 Hermes distinguishes configuration from secrets: non-secret settings belong in `config.yaml`, while secrets belong in `.env`.
 
-## 7. Backup and restore
+## 8. Backup and restore
 
 ### Backup scope
 
@@ -173,7 +192,7 @@ Hermes distinguishes configuration from secrets: non-secret settings belong in `
 5. Validate the web UI, logs, and MCP connectivity.
 6. Do not upgrade or change configuration during recovery.
 
-## 8. Upgrade and rollback
+## 9. Upgrade and rollback
 
 ### Pre-upgrade checklist
 
@@ -207,7 +226,7 @@ Stackarr recommends recording the exact image digest as well as the version tag;
 5. Validate logs, web UI, and MCP connectivity.
 6. Record the failure cause before retrying.
 
-## 9. Health checks
+## 10. Health checks
 
 | Component | Check | Expected result |
 |---|---|---|
@@ -216,6 +235,7 @@ Stackarr recommends recording the exact image digest as well as the version tag;
 | Stackarr | Selected service status | Configured media services visible |
 | Stackarr | Agent authority | `observe` |
 | Stackarr | Activity history | Hermes actions are recorded |
+| Hermes | Gateway health | Gateway and configured chat integration are running |
 | Hermes | Container logs | No MCP connection errors |
 | Hermes | MCP discovery | Stackarr tools are visible |
 | Hermes | Read-only test | Can query service status without writing |
@@ -223,7 +243,7 @@ Stackarr recommends recording the exact image digest as well as the version tag;
 
 Stackarr provides a permissions audit command for checking access to its config, logs, downloads, backups, and bind mounts used by enabled services.
 
-## 10. Incident response
+## 11. Incident response
 
 | Situation | Immediate action |
 |---|---|
@@ -235,7 +255,7 @@ Stackarr provides a permissions audit command for checking access to its config,
 | Configuration drift detected | Capture current state, compare with Git, reconcile through a reviewed commit |
 | Backup restore fails | Do not overwrite the current state; preserve it and investigate using a separate restore target |
 
-## 11. Change log
+## 12. Change log
 
 | Date | Change | Author | Git commit | Portainer deployment | Result |
 |---|---|---|---|---|---|
