@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# Hermes Agent — conversational assistant using Stackarr through MCP
+#
+# Deploy through Portainer.
+# Provide all variables through Portainer's Environment variables editor.
+# Hermes must never receive the Docker socket or join synobridge.
+# ---------------------------------------------------------------------------
+
+services:
+  hermes:
+    image: ${HERMES_IMAGE}
+    container_name: hermes
+    restart: unless-stopped
+
+    command: gateway run
+
+    environment:
+      TZ: ${TIMEZONE}
+
+      # Enable the built-in dashboard.
+      HERMES_DASHBOARD: ${HERMES_DASHBOARD}
+
+      # The dashboard must bind to a non-loopback address inside the container
+      # for the published host port to work. Protect it with basic auth.
+      HERMES_DASHBOARD_HOST: ${HERMES_DASHBOARD_CONTAINER_BIND_IP}
+      HERMES_DASHBOARD_PORT: ${HERMES_DASHBOARD_PORT}
+
+      # Dashboard authentication.
+      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: ${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}
+      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: ${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}
+      HERMES_DASHBOARD_BASIC_AUTH_SECRET: ${HERMES_DASHBOARD_BASIC_AUTH_SECRET}
+
+      # Keep the OpenAI-compatible API server disabled unless explicitly needed.
+      API_SERVER_ENABLED: ${API_SERVER_ENABLED}
+
+    ports:
+      # Gateway API; publish only to localhost.
+      - "${HERMES_GATEWAY_BIND_IP}:${HERMES_GATEWAY_PORT}:8642"
+
+      # Dashboard; publish only to localhost.
+      - "${HERMES_DASHBOARD_BIND_IP}:${HERMES_DASHBOARD_PORT}:9119"
+
+    volumes:
+      # Single persistent Hermes data directory:
+      # config.yaml, .env, SOUL.md, sessions, memories, skills, logs, state.
+      - ${HERMES_DATA}:/opt/data
+
+    networks:
+      - agent
+
+networks:
+  agent:
+    name: agent
+    external: true
