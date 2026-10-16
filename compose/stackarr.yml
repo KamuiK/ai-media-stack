@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Stackarr — controlled MCP tool layer for the existing media stack
+#
+# Deploy through Portainer.
+# Provide all variables through Portainer's Environment variables editor.
+# Do not deploy this together with the existing media-server Compose stack.
+# ---------------------------------------------------------------------------
+
+services:
+  stackarr:
+    image: ${STACKARR_IMAGE}
+    container_name: stackarr
+    restart: unless-stopped
+
+    environment:
+      TZ: ${TIMEZONE}
+      STACKARR_BIND_IP: ${STACKARR_BIND_IP}
+      STACKARR_WEB_PORT: ${STACKARR_WEB_PORT}
+      MEDIA_ROOT: ${STACKARR_MEDIA_ROOT}
+      DOWNLOADS_ROOT: ${STACKARR_DOWNLOADS_ROOT}
+      BACKUP_ROOT: ${STACKARR_BACKUP_ROOT}
+      STACKARR_MCP_PROFILE: ${STACKARR_MCP_PROFILE}
+
+    ports:
+      # Keep the dashboard localhost-only until authentication is configured.
+      - "${STACKARR_BIND_IP}:${STACKARR_WEB_PORT}:7777"
+
+    volumes:
+      # Stackarr configuration, selected services, and activity history.
+      - ${STACKARR_CONFIG}:/config
+
+      # Existing NAS storage roots.
+      - ${MEDIA_ROOT}:${STACKARR_MEDIA_ROOT}
+      - ${DOWNLOADS_ROOT}:${STACKARR_DOWNLOADS_ROOT}
+      - ${BACKUP_ROOT}:${STACKARR_BACKUP_ROOT}
+
+      # Required by Stackarr to inspect and manage containers selected
+      # during setup. Never mount this into Hermes.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    networks:
+      - agent
+      - synobridge
+
+networks:
+  agent:
+    name: agent
+    external: true
+
+  synobridge:
+    name: synobridge
+    external: true
