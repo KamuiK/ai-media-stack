@@ -38,14 +38,10 @@ services:
       # during setup. Never mount this into Hermes.
       - /var/run/docker.sock:/var/run/docker.sock
 
-    networks:
-      - agent
-      - synobridge
-
 networks:
   agent:
     name: agent
-    external: true
+    driver: bridge
 
   synobridge:
     name: synobridge
