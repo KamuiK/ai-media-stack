@@ -9,6 +9,8 @@
 services:
   stackarr:
     image: ${STACKARR_IMAGE}
+    group_add:
+      - "0"
     container_name: stackarr
     restart: unless-stopped
 
