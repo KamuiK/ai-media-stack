@@ -1,54 +1,24 @@
-# ---------------------------------------------------------------------------
-# Hermes Agent — conversational assistant using Stackarr through MCP
-#
-# Deploy through Portainer.
-# Provide all variables through Portainer's Environment variables editor.
-# Hermes must never receive the Docker socket or join synobridge.
-# ---------------------------------------------------------------------------
-
 services:
   hermes:
-    image: ${HERMES_IMAGE}
-    container_name: hermes
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:v0.22.5}
+    container_name: ${HERMES_CONTAINER_NAME:-hermes}
     restart: unless-stopped
-
     command: gateway run
-
     environment:
-      TZ: ${TIMEZONE}
-
-      # Enable the built-in dashboard.
-      HERMES_DASHBOARD: ${HERMES_DASHBOARD}
-
-      # The dashboard must bind to a non-loopback address inside the container
-      # for the published host port to work. Protect it with basic auth.
-      HERMES_DASHBOARD_HOST: ${HERMES_DASHBOARD_CONTAINER_BIND_IP}
-      HERMES_DASHBOARD_PORT: ${HERMES_DASHBOARD_PORT}
-
-      # Dashboard authentication.
-      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: ${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}
-      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: ${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}
-      HERMES_DASHBOARD_BASIC_AUTH_SECRET: ${HERMES_DASHBOARD_BASIC_AUTH_SECRET}
-
-      # Keep the OpenAI-compatible API server disabled unless explicitly needed.
-      API_SERVER_ENABLED: ${API_SERVER_ENABLED}
-
-    ports:
-      # Gateway API; publish only to localhost.
-      - "${HERMES_GATEWAY_BIND_IP}:${HERMES_GATEWAY_PORT}:8642"
-
-      # Dashboard; publish only to localhost.
-      - "${HERMES_DASHBOARD_BIND_IP}:${HERMES_DASHBOARD_PORT}:9119"
-
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
     volumes:
-      # Single persistent Hermes data directory:
-      # config.yaml, .env, SOUL.md, sessions, memories, skills, logs, state.
-      - ${HERMES_DATA}:/opt/data
-
+      - ${HERMES_DATA_DIR:-/volume1/docker/hermes}:/opt/data
     networks:
-      - agent
+      - synobridge
+    ports:
+      - "${HERMES_GATEWAY_PORT:-8642}:8642"
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "1.5"
 
 networks:
-  agent:
-    name: agent
+  synobridge:
     external: true
