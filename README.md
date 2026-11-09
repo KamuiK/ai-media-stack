@@ -1,97 +1,35 @@
-# AI Media Server Stack
+# AI Media Stack
 
-Controlled AI-agent layer for an existing self-hosted media server running on a Synology DS423+.
+Infrastructure, configuration, and documentation for a self-hosted media stack.
 
-This repository contains the deployment definitions, safety policy, and operational documentation for:
+## Current baseline
 
-- **Stackarr** — controlled MCP tool layer for the existing media services
-- **Hermes Agent** — conversational AI agent that uses Stackarr through MCP
+- **Hermes Agent** is deployed and running.
+- **`mcp-arr-anime`** is the active media MCP service, covering anime Sonarr and Radarr.
+- **Cloudflare Tunnel** provides existing public ingress infrastructure.
+- **Stackarr** is not deployed and not used.
+- **Media Support** is planned but not deployed.
 
-This repository does **not** deploy or modify the existing media stack.
+## Media Support
 
-## Architecture
+Media Support is a planned WhatsApp-first, read-only support assistant. It will create persistent tickets, provide evidence-based diagnostics through approved MCP tools, and give administrators a private Discord workflow.
 
-```text
-User
-  |
-  v
-Hermes Agent
-  |
-  | MCP only
-  v
-Stackarr
-  |
-  | Controlled service APIs
-  v
-Jellyfin / qBittorrent / Sonarr / Radarr / Seerr / Prowlarr / Jackett
-```
+It will run inside the existing Hermes container as a Hermes plugin plus skill. A separate Neon PostgreSQL project will be the system of record for tickets, users, audit events, attachment metadata, WhatsApp window state, and Discord references.
 
-Hermes never communicates directly with Sonarr, Radarr, Seerr, qBittorrent, Prowlarr, Jackett, Jellyfin, Docker, Portainer, SSH, SMB, or Synology DSM.
+Media Support will not manage Docker, NAS, SSH, SMB, DSM, media files, or upstream ARR credentials.
 
-## Upstream media stack
+## Documentation
 
-The production media stack is maintained in a separate repository:
+- [`docs/current-state.md`](docs/current-state.md) — deployed baseline and evidence precedence
+- [`docs/phase-2-decisions.md`](docs/phase-2-decisions.md) — approved Phase 2 decisions
+- [`docs/06-architecture-decision-record.md`](docs/06-architecture-decision-record.md) — architecture decisions
+- [`docs/07-data-model.md`](docs/07-data-model.md) — Neon data model and migration strategy
+- [`docs/08-project-or-environment-setup.md`](docs/08-project-or-environment-setup.md) — repository, secrets, and test setup
+- [`docs/09-deployment-or-rollout-plan.md`](docs/09-deployment-or-rollout-plan.md) — rollout, rollback, and monitoring
+- [`docs/runbook.md`](docs/runbook.md) — operational procedures
+- [`docs/service-map.md`](docs/service-map.md) — service relationships and boundaries
+- [`docs/safety-policy.md`](docs/safety-policy.md) — security and privacy rules
 
-- Repository: `<EXISTING_MEDIA_SERVER_REPO_URL>`
-- Deployment method: Portainer
-- Services: Jellyfin, qBittorrent behind Gluetun, multiple Sonarr/Radarr instances, Seerr, Prowlarr, and Jackett
+## Status
 
-Stackarr connects to those already-running services. This repository only adds the agent/control layer.
-
-## Repository layout
-
-```text
-ai-media-stack/
-├── README.md
-├── .gitignore
-├── docs/
-│   ├── runbook.md
-│   ├── service-map.md
-│   └── safety-policy.md
-├── env/
-│   ├── stackarr.env.example
-│   └── hermes.env.example
-├── config/
-│   ├── stackarr/
-│   └── hermes/
-└── compose/
-    ├── stackarr.yml
-    └── hermes.yml
-```
-
-## Safety model
-
-- Hermes has no Docker socket access.
-- Hermes has no raw API keys for any media service.
-- Hermes connects only to Stackarr through MCP.
-- Stackarr starts with `observe` authority.
-- Write-capable actions require explicit user approval.
-- Configuration changes are reviewed in Git and deployed through Portainer.
-- Destructive, bulk, infrastructure, or irreversible actions are forbidden.
-
-See [`docs/safety-policy.md`](docs/safety-policy.md).
-
-## Deployment
-
-Deployment is performed through Portainer using the Compose files in [`compose/`](compose/).
-
-1. Create the required Docker networks and host folders.
-2. Copy the `.env.example` files to the NAS-side environment location.
-3. Fill in real secrets only outside Git.
-4. Deploy `compose/stackarr.yml` through Portainer.
-5. Validate Stackarr read-only access.
-6. Deploy `compose/hermes.yml` through Portainer.
-7. Validate that Hermes can discover Stackarr MCP tools.
-8. Keep Stackarr authority at `observe` until explicitly changed through a reviewed change.
-
-## Current status
-
-| Work package | Status | Notes |
-|---|---|---|
-| WP0 — Runbook and safety baseline | `IN_PROGRESS` | Documentation and safety policy |
-| WP1 — Deploy Stackarr | `NOT_STARTED` | Stackarr running via Portainer |
-| WP2 — Connect media services | `NOT_STARTED` | Read-only service connections |
-| WP3 — Hermes read-only MCP integration | `NOT_STARTED` | Hermes can query Stackarr |
-| WP4 — Approval-gated actions | `NOT_STARTED` | Controlled write actions |
-| WP5 — Automation policies | `NOT_STARTED` | Seeding, MAL sync, health automation |
-| WP6 — Hardening and local LLM | `NOT_STARTED` | Later-phase work |
+Phase 2 architecture is approved. Implementation, Neon provisioning, migrations, deployment changes, and production WhatsApp onboarding require separate explicit approval.

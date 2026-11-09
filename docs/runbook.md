@@ -1,268 +1,79 @@
-# Runbook — AI Media Server Stack
+# Media Stack Runbook
 
-This runbook covers the AI agent layer: **Stackarr** and **Hermes Agent**.
+Status: Updated for current baseline and approved Media Support planning
 
-The existing production media stack is maintained separately in:
+## Current deployed services
 
-- Repository: <https://github.com/KamuiK/media-server>
-- Deployment method: Portainer
-- Services: Jellyfin, qBittorrent behind Gluetun, multiple Sonarr/Radarr instances, Seerr, Prowlarr, and Jackett
-
-This repository does not deploy, upgrade, or modify those media services. Stackarr connects to them; Hermes connects only to Stackarr.
-
-## 1. Operating principles
-
-- GitHub is the source of truth for this repository’s configuration.
-- All changes are reviewed through Git before deployment.
-- Portainer deploys the Compose files in `compose/`.
-- Hermes has no Docker socket, no direct media-service API access, and no NAS administrative access.
-- Stackarr is the only approved MCP tool layer between Hermes and the media services.
-- Stackarr starts with the `observe` authority profile.
-- Real secrets are stored outside Git and are never committed.
-- Every image is pinned to an exact version or digest; floating tags are not used.
-- Every deployment has a documented rollback path.
-
-Stackarr’s supported Docker installation uses a Compose file with an adjacent `.env` file for overrides, and recommends an exact image version rather than a moving tag for reproducible deployments and rollback.
-
-## 2. Host and deployment model
-
-| Item | Value |
+| Service | State |
 |---|---|
-| NAS | Synology DS423+ |
-| Docker interface | Portainer |
-| Existing media-stack repository | <https://github.com/KamuiK/media-server> |
-| Agent-layer repository | <https://github.com/KamuiK/ai-media-stack> |
-| Default branch | `main` |
-| Deployment branch | `main` |
-| Stackarr Compose file | `compose/stackarr.yml` |
-| Hermes Compose file | `compose/hermes.yml` |
-| Stackarr environment file | `env/stackarr.env` |
-| Hermes environment file | `env/hermes.env` |
-| Timezone | `Europe/Vienna` |
-| Administrator | `KamuiK` |
+| Hermes Agent | Deployed and running; image `nousresearch/hermes-agent:v0.22.5` |
+| `mcp-arr-anime` | Active; covers anime Sonarr and Radarr |
+| Cloudflare Tunnel | Active; existing ingress infrastructure |
+| Stackarr | Not deployed and not used |
+| Media Support | Planned; not deployed |
 
-### Deployment boundaries
+## Hermes baseline
 
-| Component | May access | Must not access |
-|---|---|---|
-| Hermes | Stackarr MCP endpoint | Docker socket, media-service APIs, NAS filesystem, SSH, SMB, DSM, Portainer |
-| Stackarr | Selected media-service APIs; Docker socket for selected-container management | Hermes secrets, LLM provider API key |
-| Media services | Their own configuration and media paths | Hermes configuration or credentials |
+- Image: `nousresearch/hermes-agent:v0.22.5`
+- Digest: `sha256:49b70739d2e8b4206fabf8b089f88337db73f8edaccb93e64b0836694ef10a03`
+- MCP server key: `arr_anime`
+- MCP URL: `http://mcp-arr-anime:3000/mcp`
+- Current MCP trust: `full`
+- Telegram: enabled
+- WhatsApp and Discord: not currently enabled
 
-Stackarr requires `/var/run/docker.sock` to inspect and manage containers selected during setup. This is powerful host-level access and must be limited to Stackarr; Hermes must never receive it.
+The current MCP surface includes both inspection and write-capable operations. It is not read-only.
 
-## 3. Service inventory
+## Media Support rollout procedure
 
-### Stackarr
+When implementation is approved:
 
-| Item | Value |
+1. Create the private plugin repository.
+2. Apply and validate the initial Neon migration on a disposable branch.
+3. Install the pinned plugin revision into Hermes.
+4. Configure the Meta test number and webhook route.
+5. Configure the private Discord ticket channel.
+6. Restrict Hermes to verified read-only MCP tools.
+7. Run the acceptance suite.
+8. Obtain explicit production-onboarding approval.
+
+## Allowlist procedure
+
+1. Administrator issues `allow` or `revoke` in Discord.
+2. Plugin validates Discord identity and updates Neon.
+3. Plugin renders the canonical Hermes WhatsApp allowlist.
+4. Apply the controlled Hermes configuration update/restart.
+5. Verify effective Hermes state.
+6. Mark the Neon synchronization state accordingly.
+
+A revoked user must be denied Media Support actions even if Hermes has not yet applied the native allowlist change.
+
+## Ticket procedure
+
+1. Authorized WhatsApp user reports an issue.
+2. Hermes native allowlist admits the sender.
+3. Plugin checks for an active duplicate.
+4. User chooses to add to an existing ticket or create a new one.
+5. Plugin creates/updates Neon and Discord thread.
+6. Agent performs read-only diagnostics only.
+7. Administrator resolves or closes the ticket in Discord.
+8. Plugin updates Neon and handles the WhatsApp 24-hour window.
+
+## Incident response
+
+| Symptom | Action |
 |---|---|
-| Purpose | Controlled MCP tool layer for media services |
-| Image | `polyphonic/stackarr:0.3.0-alpha.21` |
-| Image digest | `TODO_AFTER_FIRST_DEPLOY` |
-| Web UI port | `7777` |
-| Published bind address | `127.0.0.1` initially |
-| Config volume | `/volume1/docker/stackarr/config` → `/config` |
-| Media root | `/volume1/data/media` → `/media` |
-| Downloads root | `/volume1/data/torrents` → `/downloads` |
-| Backup root | `/volume1/data/backup/stackarr` → `/backups` |
-| Networks | `agent`, `synobridge` |
-| Authority profile | `observe` |
-| Docker socket | Mounted into Stackarr only; never mounted into Hermes |
-| Dashboard exposure | Localhost only until authentication is configured |
+| Neon unavailable | Media Support fails closed; do not create untracked tickets |
+| Discord unavailable | Mark Discord operation failed; retry only where safe |
+| WhatsApp webhook unavailable | Check Cloudflare Tunnel and Hermes health |
+| MCP unavailable | Report category unavailable; do not infer absence |
+| Plugin/Neon allowlist mismatch | Deny Media Support actions and alert administrator |
+| Suspicious webhook | Reject invalid signature; investigate without exposing secrets |
 
-Stackarr’s documented defaults are web port `7777`, bind address `127.0.0.1`, and environment variables for media, downloads, and backup roots. It starts other services only after they are selected during setup.
+## Rollback
 
-### Hermes
-
-| Item | Value |
-|---|---|
-| Purpose | Conversational agent using Stackarr MCP |
-| Image | `nousresearch/hermes-agent:v2026.8.3` |
-| Image digest | `sha256:16788311e2fa3035456bdc1bafb8ec2b1777db64ebf020af9bb7eb73c3712c9e` |
-| Gateway API port | `8642` |
-| Dashboard port | `9119`, only if `HERMES_DASHBOARD=1` |
-| Data volume | `/volume1/docker/hermes` → `/opt/data` |
-| Network | `agent` only |
-| MCP server | Stackarr |
-| LLM provider | OpenRouter |
-| Default model | `TODO_CHOOSE_BEFORE_HERMES_DEPLOYMENT` |
-| Docker socket | Never mounted |
-| Direct media-service access | Never permitted |
-| Terminal backend | `local`; Docker terminal backend disabled |
-
-Hermes stores all mutable state—configuration, `.env`, sessions, memories, skills, logs, and its SQLite state database—in the single `/opt/data` volume.
-
-## 4. Networks
-
-The existing Sonarr/Radarr services use `network_mode: synobridge`. Therefore, Stackarr joins `synobridge` to reach them, while Hermes remains isolated on the dedicated `agent` network.
-
-| Network | Purpose | Members | External exposure |
-|---|---|---|---|
-| `agent` | Hermes-to-Stackarr control plane | Stackarr, Hermes | No direct WAN exposure |
-| `synobridge` | Existing Synology bridge network used by media services | Existing media services, Stackarr | No direct WAN exposure |
-| Existing Gluetun network | VPN-isolated torrent traffic | Gluetun, qBittorrent | No direct WAN exposure |
-
-### Network rules
-
-- Hermes joins `agent` only.
-- Stackarr joins `agent` and `synobridge`.
-- Hermes reaches Stackarr by its Compose service name: `http://stackarr:7777`.
-- Stackarr reaches Sonarr/Radarr containers by container name on `synobridge`, for example `http://prod-sonarr-tv:8989`.
-- If container-name resolution on `synobridge` fails, Stackarr uses the NAS LAN IP and each service’s published port instead.
-- Hermes must not join `synobridge`.
-- Stackarr must not be exposed publicly.
-- Hermes must not be exposed publicly.
-- The Stackarr dashboard remains bound to `127.0.0.1` until authentication and access controls are configured.
-
-## 5. Existing media-service map
-
-| Media type | Compose service | Container name | Internal port | Published port | Root-folder prefix |
-|---|---|---|---:|---:|---|
-| General TV | `sonarr-tv` | `prod-sonarr-tv` | `8989` | `${SONARR_TV_PORT}` | `/media/...` |
-| Anime TV | `sonarr-anime` | `prod-sonarr-anime` | `8989` | `${SONARR_ANIME_PORT}` | `/media/...` |
-| Asian TV | `sonarr-asian` | `prod-sonarr-asian` | `8989` | `${SONARR_ASIAN_PORT}` | `/media/...` |
-| General movies | `radarr-movies` | `prod-radarr-movies` | `7878` | `${RADARR_MOVIES_PORT}` | `/media/...` |
-| Anime movies | `radarr-anime` | `prod-radarr-anime` | `7878` | `${RADARR_ANIME_PORT}` | `/media/...` |
-| Asian movies | `radarr-asian` | `prod-radarr-asian` | `7878` | `${RADARR_ASIAN_PORT}` | `/media/...` |
-
-All Sonarr/Radarr containers mount `${DATA_ROOT}` at `/media`. The exact root-folder subpaths, quality profiles, categories/tags, and Seerr behavior are documented in `docs/service-map.md` and must be verified from each running application.
-
-## 6. Paths and volumes
-
-| Component | Host path | Container path | Backup priority | Notes |
-|---|---|---|---|---|
-| Stackarr configuration | `/volume1/docker/stackarr/config` | `/config` | Critical | Service selections, settings, activity data |
-| Stackarr logs | `/volume1/docker/stackarr/logs` | `TODO_VERIFY_AFTER_FIRST_RUN` | High | Retain for incident review |
-| Hermes data | `/volume1/docker/hermes` | `/opt/data` | Critical | `config.yaml`, `.env`, sessions, memories, skills, state database |
-| Media root | `/volume1/data/media` | `/media` | No | Existing media library |
-| Downloads root | `/volume1/data/torrents` | `/downloads` | No | Existing download location |
-| Backup root | `/volume1/data/backup/stackarr` | `/backups` | Critical | Stackarr-managed backup destination |
-
-Create host folders before starting Stackarr and ensure the Docker runtime can read and write them.
-
-## 7. Credentials and secrets
-
-| Secret | Stored in | Used by | Git-safe? |
-|---|---|---|---|
-| Stackarr dashboard/admin credential | NAS-side secret store or Stackarr configuration | Stackarr | No |
-| Stackarr MCP credential/token | Hermes `.env` on NAS | Hermes | No |
-| Media-service API keys | Stackarr configuration / NAS-side secret store | Stackarr | No |
-| OpenRouter API key | Hermes `.env` on NAS | Hermes | No |
-| Telegram/Discord credentials | Hermes `.env` on NAS | Hermes | No |
-| GitHub token, if required | NAS-side secret store or Portainer | Portainer | No |
-
-### Rules
-
-- `.env.example` files may be committed; real `.env` files must not be.
-- Hermes receives only its LLM credentials and Stackarr MCP connection details.
-- Hermes must not receive Sonarr, Radarr, Seerr, qBittorrent, Prowlarr, Jackett, or Jellyfin API keys.
-- Stackarr holds the upstream media-service credentials.
-- If a secret appears in Git, logs, screenshots, or agent transcripts, rotate it immediately.
-
-Hermes distinguishes configuration from secrets: non-secret settings belong in `config.yaml`, while secrets belong in `.env`.
-
-## 8. Backup and restore
-
-### Backup scope
-
-| Priority | Item | Frequency | Retention | Destination |
-|---|---|---|---|---|
-| Critical | Stackarr configuration and activity data | Daily | 30 daily, 12 monthly | `/volume1/data/backup/stackarr` |
-| Critical | Hermes `.env` and configuration | Daily | 30 daily, 12 monthly | `/volume1/data/backup/hermes` |
-| High | Hermes sessions, memories, and state database | Daily | 30 daily | `/volume1/data/backup/hermes` |
-| Medium | Compose files and Git repository state | On change | Git history plus periodic export | GitHub and `/volume1/data/backup` |
-| No | Media libraries and downloads | — | — | Managed by the existing media-stack workflow |
-
-### Backup procedure
-
-1. Confirm free space at `/volume1/data/backup`.
-2. Stop Hermes before copying its SQLite state database if required.
-3. Copy Stackarr configuration and Hermes configuration/state to the backup destination.
-4. Verify that the backup archive opens and contains the expected files.
-5. Record backup date, size, Stackarr image tag, and Hermes image tag.
-6. Test a restore at least quarterly.
-
-### Restore procedure
-
-1. Stop the affected Stackarr or Hermes container in Portainer.
-2. Restore only the affected configuration or state volume.
-3. Restore the exact previous image tag or digest.
-4. Start the container.
-5. Validate the web UI, logs, and MCP connectivity.
-6. Do not upgrade or change configuration during recovery.
-
-## 9. Upgrade and rollback
-
-### Pre-upgrade checklist
-
-- [ ] Release notes and breaking changes reviewed.
-- [ ] Current image tag and digest recorded.
-- [ ] Configuration and state backup completed.
-- [ ] Rollback image tag identified.
-- [ ] Stackarr authority remains `observe`.
-- [ ] Change is committed to a Git branch and reviewed.
-- [ ] Maintenance window selected.
-
-### Upgrade procedure
-
-1. Create a branch such as `upgrade/stackarr-<old-version>-to-<new-version>`.
-2. Update only the target service’s image tag and required environment/configuration.
-3. Open a pull request and review the diff.
-4. Merge after approval.
-5. In Portainer, pull the updated Compose definition.
-6. Redeploy only Stackarr or Hermes—not the existing media stack.
-7. Check container logs, web UI, and MCP tool discovery.
-8. Update this runbook with the new version and digest.
-
-Stackarr recommends recording the exact image digest as well as the version tag; its registry also publishes commit-trace tags for correlating a container with a source commit.
-
-### Rollback procedure
-
-1. Stop the upgraded container.
-2. Revert the image tag in Git to the previous pinned version.
-3. Restore the pre-upgrade configuration/state backup if needed.
-4. Redeploy through Portainer.
-5. Validate logs, web UI, and MCP connectivity.
-6. Record the failure cause before retrying.
-
-## 10. Health checks
-
-| Component | Check | Expected result |
-|---|---|---|
-| Stackarr | Web UI at `http://127.0.0.1:7777` | Dashboard loads |
-| Stackarr | Container logs | No repeated authentication or mount errors |
-| Stackarr | Selected service status | Configured media services visible |
-| Stackarr | Agent authority | `observe` |
-| Stackarr | Activity history | Hermes actions are recorded |
-| Hermes | Gateway health | Gateway and configured chat integration are running |
-| Hermes | Container logs | No MCP connection errors |
-| Hermes | MCP discovery | Stackarr tools are visible |
-| Hermes | Read-only test | Can query service status without writing |
-| Hermes | Forbidden-action test | Cannot access Docker or media services directly |
-
-Stackarr provides a permissions audit command for checking access to its config, logs, downloads, backups, and bind mounts used by enabled services.
-
-## 11. Incident response
-
-| Situation | Immediate action |
-|---|---|
-| Hermes attempts a forbidden action | Deny it; inspect Stackarr activity history; keep authority at `observe` |
-| Stackarr dashboard is publicly reachable | Remove public exposure immediately; bind to localhost; review access logs |
-| API key exposed | Rotate the key; remove it from Git history/logs; restart affected service |
-| Hermes can reach a media service directly | Stop Hermes; correct its network attachment before restarting |
-| Stackarr becomes unavailable | Hermes loses media-stack tool access; operate media services manually |
-| Configuration drift detected | Capture current state, compare with Git, reconcile through a reviewed commit |
-| Backup restore fails | Do not overwrite the current state; preserve it and investigate using a separate restore target |
-
-## 12. Change log
-
-| Date | Change | Author | Git commit | Portainer deployment | Result |
-|---|---|---|---|---|---|
-| `2026-10-15` | Initial agent-layer runbook created | `KamuiK` | `<COMMIT>` | `<STACK_NAME>` | `<RESULT>` |
-
-## References
-
-- [Stackarr Docker installation](https://stackarr.app/docs/installation/docker)
-- [Hermes Agent configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
-- [Hermes Agent Docker setup](https://hermes-agent.nousresearch.com/docs/user-guide/docker)
+- Revert plugin to previous pinned commit.
+- Keep migrations forward-only.
+- Use a compensating migration for schema repair.
+- Verify Neon, Discord, WhatsApp, and MCP health before reopening.
+- Do not remove `mcp-arr-anime` during a Media Support rollback.
